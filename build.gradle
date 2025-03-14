@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+    id 'biz.aQute.bnd.builder' version '6.3.1'
+}
+
+group = 'com.osgi'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.osgi:osgi.core:6.0.0'
+    implementation 'org.apache.felix:org.apache.felix.framework:7.0.5'
+
+    // Felix Gogo Shell (optional, for debugging)
+    implementation 'org.apache.felix:org.apache.felix.gogo.shell:1.1.4'
+    implementation 'org.apache.felix:org.apache.felix.gogo.runtime:1.1.4'
+    implementation 'org.apache.felix:org.apache.felix.gogo.command:1.0.2'
+}
+
+// Ensure UTF-8 encoding
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// Function to create OSGi bundles dynamically
+def createOSGiBundle(name, activator, exports = '', imports = 'org.osgi.framework') {
+    tasks.register("${name}Jar", Jar) {
+        archiveBaseName.set(name.replace('_', '-'))
+        destinationDirectory.set(file("$buildDir/libs"))
+
+        manifest {
+            attributes(
+                    'Bundle-ManifestVersion': '2',
+                    'Bundle-Name': name.replace('_', ' ').capitalize(),
+                    'Bundle-SymbolicName': name,
+                    'Bundle-Version': project.version,
+                    'Import-Package': imports,
+                    'Export-Package': exports,
+                    'Bundle-Activator': activator
+            )
+        }
+        from sourceSets.main.output
+    }
+}
+
+// ✅ Define all OSGi bundles
+def bundles = [
+        createOSGiBundle('inventory_producer', 'inventory_producer.InventoryActivator', 'inventory_producer, inventory_producer.InventoryService'),
+        createOSGiBundle('inventory_consumer', 'inventory_consumer.InventoryConsumerActivator', 'inventory_consumer', 'org.osgi.framework, inventory_producer'),
+        createOSGiBundle('order_producer', 'order_producer.OrderActivator', 'order_producer'),
+        createOSGiBundle('order_consumer', 'order_consumer.OrderConsumerActivator', 'order_consumer', 'org.osgi.framework, order_producer, inventory_producer, loyalty_producer'),
+        createOSGiBundle('loyalty_producer', 'loyalty_producer.LoyaltyActivator', 'loyalty_producer'),
+        createOSGiBundle('loyalty_consumer', 'loyalty_consumer.LoyaltyConsumerActivator', 'loyalty_consumer', 'org.osgi.framework, loyalty_producer'),
+        createOSGiBundle('support_producer', 'support_producer.SupportActivator', 'support_producer'),
+        createOSGiBundle('support_consumer', 'support_consumer.SupportConsumerActivator', 'support_consumer', 'org.osgi.framework, support_producer')
+]
+
+// ✅ Ensure all JAR tasks are included in the build
+tasks.register("buildAll") {
+    dependsOn(bundles)
+}
